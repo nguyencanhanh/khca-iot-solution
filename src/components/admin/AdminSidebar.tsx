@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   FileText, 
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Tổng quan", path: "/admin" },
@@ -30,6 +31,13 @@ interface AdminSidebarProps {
 
 const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
 
   return (
     <aside className={cn(
@@ -93,16 +101,16 @@ const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
           <Settings className="w-5 h-5" />
           {!collapsed && <span className="font-medium">Cài đặt</span>}
         </Link>
-        <Link
-          to="/"
+        <button
+          onClick={handleLogout}
           className={cn(
-            "flex items-center gap-3 px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive transition-all",
+            "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive transition-all",
             collapsed && "justify-center"
           )}
         >
           <LogOut className="w-5 h-5" />
           {!collapsed && <span className="font-medium">Đăng xuất</span>}
-        </Link>
+        </button>
       </div>
     </aside>
   );

@@ -2,30 +2,43 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Droplets, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { Droplets, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
-const Login = () => {
+const Register = () => {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { signUp } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
+    fullName: "",
     email: "",
     password: "",
+    confirmPassword: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (formData.password !== formData.confirmPassword) {
+      toast.error("Mật khẩu xác nhận không khớp");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast.error("Mật khẩu phải có ít nhất 6 ký tự");
+      return;
+    }
+
     setIsLoading(true);
     
-    const { error } = await signIn(formData.email, formData.password);
+    const { error } = await signUp(formData.email, formData.password, formData.fullName);
     
     if (error) {
-      toast.error("Đăng nhập thất bại: " + error.message);
+      toast.error("Đăng ký thất bại: " + error.message);
     } else {
-      toast.success("Đăng nhập thành công!");
+      toast.success("Đăng ký thành công! Đang chuyển hướng...");
       navigate("/admin");
     }
     setIsLoading(false);
@@ -54,11 +67,10 @@ const Login = () => {
 
         <div className="relative z-10">
           <h1 className="font-display text-4xl font-bold text-white mb-4">
-            Hệ thống quản trị nội bộ
+            Tham gia đội ngũ
           </h1>
           <p className="text-white/80 text-lg leading-relaxed max-w-md">
-            Truy cập vào hệ thống quản lý tài liệu, công việc, kho hàng và tài chính 
-            của công ty một cách an toàn và tiện lợi.
+            Đăng ký tài khoản để truy cập hệ thống quản trị nội bộ của AquaTech IoT.
           </p>
         </div>
 
@@ -68,7 +80,7 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Side - Register Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
@@ -85,14 +97,31 @@ const Login = () => {
 
           <div className="text-center mb-8">
             <h2 className="font-display text-3xl font-bold text-foreground mb-2">
-              Đăng nhập
+              Đăng ký
             </h2>
             <p className="text-muted-foreground">
-              Nhập thông tin đăng nhập để truy cập hệ thống
+              Tạo tài khoản mới để truy cập hệ thống
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Họ và tên
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  placeholder="Nguyễn Văn A"
+                  className="h-12 pl-10"
+                  required
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
                 Email
@@ -120,7 +149,7 @@ const Login = () => {
                   type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Nhập mật khẩu"
+                  placeholder="Tối thiểu 6 ký tự"
                   className="h-12 pl-10 pr-10"
                   required
                 />
@@ -134,25 +163,32 @@ const Login = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-input" />
-                <span className="text-sm text-muted-foreground">Ghi nhớ đăng nhập</span>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Xác nhận mật khẩu
               </label>
-              <a href="#" className="text-sm text-primary hover:underline">
-                Quên mật khẩu?
-              </a>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  placeholder="Nhập lại mật khẩu"
+                  className="h-12 pl-10"
+                  required
+                />
+              </div>
             </div>
 
             <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
-              {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
+              {isLoading ? "Đang đăng ký..." : "Đăng ký"}
             </Button>
           </form>
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
-            Chưa có tài khoản?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Đăng ký
+            Đã có tài khoản?{" "}
+            <Link to="/login" className="text-primary hover:underline font-medium">
+              Đăng nhập
             </Link>
           </p>
         </div>
@@ -161,4 +197,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Register;
