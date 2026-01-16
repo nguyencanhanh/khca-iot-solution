@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Filter, Search, Download, MoreVertical, Package, ArrowUpDown } from "lucide-react";
+import { Plus, Filter, Search, Download, MoreVertical, Package, ArrowUpDown, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -19,6 +19,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Database } from "@/integrations/supabase/types";
@@ -73,6 +89,9 @@ const Inventory = () => {
     project_id: "",
     notes: "",
   });
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
 
   useEffect(() => {
     fetchInventory();
@@ -182,6 +201,67 @@ const Inventory = () => {
     } catch (error: any) {
       console.error("Error updating status:", error);
       toast.error("Lỗi khi cập nhật trạng thái");
+    }
+  };
+
+  const handleEditItem = (item: InventoryItem) => {
+    setEditingItem(item);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editingItem || !editingItem.name.trim() || !editingItem.serial.trim() || !editingItem.location.trim()) {
+      toast.error("Vui lòng điền đầy đủ thông tin bắt buộc");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("inventory_items")
+        .update({
+          name: editingItem.name,
+          serial: editingItem.serial,
+          firmware: editingItem.firmware,
+          status: editingItem.status,
+          location: editingItem.location,
+          project_id: editingItem.project_id,
+          notes: editingItem.notes,
+        })
+        .eq("id", editingItem.id);
+
+      if (error) throw error;
+
+      toast.success("Đã cập nhật thiết bị");
+      setIsEditDialogOpen(false);
+      setEditingItem(null);
+      fetchInventory();
+    } catch (error: any) {
+      console.error("Error updating inventory item:", error);
+      if (error.code === "23505") {
+        toast.error("Serial number đã tồn tại");
+      } else {
+        toast.error("Lỗi khi cập nhật thiết bị");
+      }
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("id", itemToDelete.id);
+
+      if (error) throw error;
+
+      toast.success("Đã xóa thiết bị");
+      setItemToDelete(null);
+      fetchInventory();
+    } catch (error: any) {
+      console.error("Error deleting inventory item:", error);
+      toast.error("Lỗi khi xóa thiết bị");
     }
   };
 
@@ -415,9 +495,26 @@ const Inventory = () => {
                     {new Date(item.updated_at).toLocaleDateString('vi-VN')}
                   </td>
                   <td>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditItem(item)}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Chỉnh sửa
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => setItemToDelete(item)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Xóa
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))}
@@ -437,6 +534,125 @@ const Inventory = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Item Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa thiết bị</DialogTitle>
+          </DialogHeader>
+          {editingItem && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Tên thiết bị *</Label>
+                <Input
+                  id="edit-name"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                  placeholder="VD: AquaSense Pro"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-serial">Serial *</Label>
+                  <Input
+                    id="edit-serial"
+                    value={editingItem.serial}
+                    onChange={(e) => setEditingItem({ ...editingItem, serial: e.target.value })}
+                    placeholder="VD: ASP-2024-0001"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-firmware">Firmware</Label>
+                  <Input
+                    id="edit-firmware"
+                    value={editingItem.firmware || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, firmware: e.target.value })}
+                    placeholder="VD: v2.3.1"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Trạng thái</Label>
+                  <Select
+                    value={editingItem.status}
+                    onValueChange={(value: InventoryStatus) => setEditingItem({ ...editingItem, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in_stock">Còn kho</SelectItem>
+                      <SelectItem value="deployed">Đã xuất</SelectItem>
+                      <SelectItem value="deploying">Đang triển khai</SelectItem>
+                      <SelectItem value="maintenance">Bảo trì</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-location">Vị trí *</Label>
+                  <Input
+                    id="edit-location"
+                    value={editingItem.location}
+                    onChange={(e) => setEditingItem({ ...editingItem, location: e.target.value })}
+                    placeholder="VD: Kho HCM"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Dự án</Label>
+                <Select
+                  value={editingItem.project_id || ""}
+                  onValueChange={(value) => setEditingItem({ ...editingItem, project_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn dự án (nếu có)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name} ({project.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-notes">Ghi chú</Label>
+                <Textarea
+                  id="edit-notes"
+                  value={editingItem.notes || ""}
+                  onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+                  placeholder="Ghi chú thêm về thiết bị"
+                />
+              </div>
+              <Button onClick={handleUpdateItem} className="w-full">
+                Cập nhật thiết bị
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa thiết bị</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa thiết bị "{itemToDelete?.name}" (Serial: {itemToDelete?.serial})? 
+              Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteItem} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

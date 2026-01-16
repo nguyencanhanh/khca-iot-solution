@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Filter, Search, MoreVertical, Calendar, User, Tag } from "lucide-react";
+import { Plus, Filter, Search, MoreVertical, Calendar, User, Tag, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -85,6 +101,9 @@ const Tasks = () => {
     project_id: "",
     deadline: "",
   });
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -206,6 +225,62 @@ const Tasks = () => {
     } catch (error: any) {
       console.error("Error creating task:", error);
       toast.error("Lỗi khi tạo công việc");
+    }
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateTask = async () => {
+    if (!editingTask || !editingTask.title.trim()) {
+      toast.error("Vui lòng nhập tiêu đề công việc");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          title: editingTask.title,
+          description: editingTask.description,
+          priority: editingTask.priority,
+          assignee_id: editingTask.assignee_id,
+          project_id: editingTask.project_id,
+          deadline: editingTask.deadline,
+        })
+        .eq("id", editingTask.id);
+
+      if (error) throw error;
+
+      toast.success("Đã cập nhật công việc");
+      setIsEditDialogOpen(false);
+      setEditingTask(null);
+      fetchTasks();
+    } catch (error: any) {
+      console.error("Error updating task:", error);
+      toast.error("Lỗi khi cập nhật công việc");
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", taskToDelete.id);
+
+      if (error) throw error;
+
+      toast.success("Đã xóa công việc");
+      setTaskToDelete(null);
+      fetchTasks();
+    } catch (error: any) {
+      console.error("Error deleting task:", error);
+      toast.error("Lỗi khi xóa công việc");
     }
   };
 
@@ -377,9 +452,26 @@ const Tasks = () => {
                         <h4 className="font-medium text-foreground text-sm leading-tight">
                           {task.title}
                         </h4>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditTask(task)}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Chỉnh sửa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setTaskToDelete(task)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Xóa
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                       {task.description && (
                         <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
@@ -413,6 +505,122 @@ const Tasks = () => {
           </div>
         ))}
       </div>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa công việc</DialogTitle>
+          </DialogHeader>
+          {editingTask && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Tiêu đề *</Label>
+                <Input
+                  id="edit-title"
+                  value={editingTask.title}
+                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                  placeholder="Nhập tiêu đề công việc"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Mô tả</Label>
+                <Textarea
+                  id="edit-description"
+                  value={editingTask.description || ""}
+                  onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+                  placeholder="Mô tả chi tiết công việc"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Độ ưu tiên</Label>
+                  <Select
+                    value={editingTask.priority}
+                    onValueChange={(value: TaskPriority) => setEditingTask({ ...editingTask, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">Cao</SelectItem>
+                      <SelectItem value="medium">Trung bình</SelectItem>
+                      <SelectItem value="low">Thấp</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deadline">Deadline</Label>
+                  <Input
+                    id="edit-deadline"
+                    type="date"
+                    value={editingTask.deadline || ""}
+                    onChange={(e) => setEditingTask({ ...editingTask, deadline: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Người thực hiện</Label>
+                <Select
+                  value={editingTask.assignee_id || ""}
+                  onValueChange={(value) => setEditingTask({ ...editingTask, assignee_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn người thực hiện" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Dự án</Label>
+                <Select
+                  value={editingTask.project_id || ""}
+                  onValueChange={(value) => setEditingTask({ ...editingTask, project_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn dự án" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name} ({project.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleUpdateTask} className="w-full">
+                Cập nhật công việc
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!taskToDelete} onOpenChange={(open) => !open && setTaskToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa công việc</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa công việc "{taskToDelete?.title}"? 
+              Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
