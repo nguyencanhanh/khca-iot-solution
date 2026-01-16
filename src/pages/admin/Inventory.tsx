@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Filter, Search, Download, MoreVertical, Package, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,30 +10,40 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import type { Database } from "@/integrations/supabase/types";
+
+type InventoryStatus = Database["public"]["Enums"]["inventory_status"];
 
 interface InventoryItem {
-  id: number;
+  id: string;
   name: string;
   serial: string;
-  firmware: string;
-  status: "in_stock" | "deployed" | "deploying" | "maintenance";
+  firmware: string | null;
+  status: InventoryStatus;
   location: string;
-  lastUpdated: string;
-  project?: string;
+  project_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  project?: { name: string; code: string } | null;
 }
 
-const inventoryData: InventoryItem[] = [
-  { id: 1, name: "AquaSense Pro", serial: "ASP-2024-0892", firmware: "v2.3.1", status: "in_stock", location: "Kho HCM", lastUpdated: "2024-12-10" },
-  { id: 2, name: "FlowMaster 5000", serial: "FM5-2024-0156", firmware: "v1.8.0", status: "deployed", location: "Dự án BD-01", project: "Bình Dương", lastUpdated: "2024-12-08" },
-  { id: 3, name: "IoT Gateway G4", serial: "GTW-2024-0423", firmware: "v2.5.0", status: "deploying", location: "Dự án DN-03", project: "Đà Nẵng", lastUpdated: "2024-12-12" },
-  { id: 4, name: "AquaSense Pro", serial: "ASP-2024-0893", firmware: "v2.3.1", status: "in_stock", location: "Kho HN", lastUpdated: "2024-12-11" },
-  { id: 5, name: "FlowMaster 5000", serial: "FM5-2024-0157", firmware: "v1.8.0", status: "maintenance", location: "Xưởng HCM", lastUpdated: "2024-12-09" },
-  { id: 6, name: "IoT Gateway G4", serial: "GTW-2024-0424", firmware: "v2.5.0", status: "deployed", location: "Dự án HN-02", project: "Hà Nội", lastUpdated: "2024-12-05" },
-  { id: 7, name: "AquaSense Pro", serial: "ASP-2024-0894", firmware: "v2.3.0", status: "deployed", location: "Dự án BD-01", project: "Bình Dương", lastUpdated: "2024-12-07" },
-  { id: 8, name: "FlowMaster 5000", serial: "FM5-2024-0158", firmware: "v1.8.0", status: "in_stock", location: "Kho HCM", lastUpdated: "2024-12-13" },
-  { id: 9, name: "AquaSense Basic", serial: "ASB-2024-0234", firmware: "v1.2.0", status: "in_stock", location: "Kho HCM", lastUpdated: "2024-12-12" },
-  { id: 10, name: "IoT Gateway G4", serial: "GTW-2024-0425", firmware: "v2.4.2", status: "maintenance", location: "Xưởng HN", lastUpdated: "2024-12-10" },
-];
+interface Project {
+  id: string;
+  name: string;
+  code: string;
+}
 
 const getStatusBadge = (status: string) => {
   const config: Record<string, { class: string; label: string }> = {
@@ -47,9 +57,59 @@ const getStatusBadge = (status: string) => {
 };
 
 const Inventory = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [items] = useState<InventoryItem[]>(inventoryData);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newItem, setNewItem] = useState({
+    name: "",
+    serial: "",
+    firmware: "",
+    status: "in_stock" as InventoryStatus,
+    location: "",
+    project_id: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    fetchInventory();
+    fetchProjects();
+  }, []);
+
+  const fetchInventory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .select(`
+          *,
+          project:projects!inventory_items_project_id_fkey(name, code)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setItems(data || []);
+    } catch (error: any) {
+      console.error("Error fetching inventory:", error);
+      toast.error("Lỗi khi tải danh sách thiết bị");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, code");
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    }
+  };
 
   const filteredItems = items.filter((item) => {
     const matchesSearch = 
@@ -64,6 +124,67 @@ const Inventory = () => {
     toast.success("Đang xuất file Excel...");
   };
 
+  const handleCreateItem = async () => {
+    if (!user || !newItem.name.trim() || !newItem.serial.trim() || !newItem.location.trim()) {
+      toast.error("Vui lòng điền đầy đủ thông tin bắt buộc");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("inventory_items").insert({
+        name: newItem.name,
+        serial: newItem.serial,
+        firmware: newItem.firmware || null,
+        status: newItem.status,
+        location: newItem.location,
+        project_id: newItem.project_id || null,
+        notes: newItem.notes || null,
+        created_by: user.id,
+      });
+
+      if (error) throw error;
+
+      toast.success("Đã thêm thiết bị mới");
+      setIsDialogOpen(false);
+      setNewItem({
+        name: "",
+        serial: "",
+        firmware: "",
+        status: "in_stock",
+        location: "",
+        project_id: "",
+        notes: "",
+      });
+      fetchInventory();
+    } catch (error: any) {
+      console.error("Error creating inventory item:", error);
+      if (error.code === "23505") {
+        toast.error("Serial number đã tồn tại");
+      } else {
+        toast.error("Lỗi khi thêm thiết bị");
+      }
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: InventoryStatus) => {
+    try {
+      const { error } = await supabase
+        .from("inventory_items")
+        .update({ status })
+        .eq("id", id);
+
+      if (error) throw error;
+      
+      setItems(items.map(item => 
+        item.id === id ? { ...item, status } : item
+      ));
+      toast.success("Đã cập nhật trạng thái");
+    } catch (error: any) {
+      console.error("Error updating status:", error);
+      toast.error("Lỗi khi cập nhật trạng thái");
+    }
+  };
+
   const statusCounts = {
     all: items.length,
     in_stock: items.filter(i => i.status === "in_stock").length,
@@ -71,6 +192,14 @@ const Inventory = () => {
     deploying: items.filter(i => i.status === "deploying").length,
     maintenance: items.filter(i => i.status === "maintenance").length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -85,10 +214,108 @@ const Inventory = () => {
             <Download className="w-4 h-4" />
             Xuất Excel
           </Button>
-          <Button>
-            <Plus className="w-4 h-4" />
-            Thêm thiết bị
-          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4" />
+                Thêm thiết bị
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Thêm thiết bị mới</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Tên thiết bị *</Label>
+                  <Input
+                    id="name"
+                    value={newItem.name}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    placeholder="VD: AquaSense Pro"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="serial">Serial *</Label>
+                    <Input
+                      id="serial"
+                      value={newItem.serial}
+                      onChange={(e) => setNewItem({ ...newItem, serial: e.target.value })}
+                      placeholder="VD: ASP-2024-0001"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="firmware">Firmware</Label>
+                    <Input
+                      id="firmware"
+                      value={newItem.firmware}
+                      onChange={(e) => setNewItem({ ...newItem, firmware: e.target.value })}
+                      placeholder="VD: v2.3.1"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Trạng thái</Label>
+                    <Select
+                      value={newItem.status}
+                      onValueChange={(value: InventoryStatus) => setNewItem({ ...newItem, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_stock">Còn kho</SelectItem>
+                        <SelectItem value="deployed">Đã xuất</SelectItem>
+                        <SelectItem value="deploying">Đang triển khai</SelectItem>
+                        <SelectItem value="maintenance">Bảo trì</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Vị trí *</Label>
+                    <Input
+                      id="location"
+                      value={newItem.location}
+                      onChange={(e) => setNewItem({ ...newItem, location: e.target.value })}
+                      placeholder="VD: Kho HCM"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dự án</Label>
+                  <Select
+                    value={newItem.project_id}
+                    onValueChange={(value) => setNewItem({ ...newItem, project_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn dự án (nếu có)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name} ({project.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Ghi chú</Label>
+                  <Textarea
+                    id="notes"
+                    value={newItem.notes}
+                    onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
+                    placeholder="Ghi chú thêm về thiết bị"
+                  />
+                </div>
+                <Button onClick={handleCreateItem} className="w-full">
+                  Thêm thiết bị
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -173,19 +400,19 @@ const Inventory = () => {
                   <td>
                     <div className="font-medium text-foreground">{item.name}</div>
                     {item.project && (
-                      <div className="text-xs text-muted-foreground">{item.project}</div>
+                      <div className="text-xs text-muted-foreground">{item.project.name}</div>
                     )}
                   </td>
                   <td>
                     <span className="font-mono text-xs">{item.serial}</span>
                   </td>
                   <td>
-                    <span className="text-xs bg-muted px-2 py-1 rounded">{item.firmware}</span>
+                    <span className="text-xs bg-muted px-2 py-1 rounded">{item.firmware || "N/A"}</span>
                   </td>
                   <td>{getStatusBadge(item.status)}</td>
                   <td className="text-muted-foreground">{item.location}</td>
                   <td className="text-muted-foreground text-sm">
-                    {new Date(item.lastUpdated).toLocaleDateString('vi-VN')}
+                    {new Date(item.updated_at).toLocaleDateString('vi-VN')}
                   </td>
                   <td>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -206,7 +433,6 @@ const Inventory = () => {
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled>Trước</Button>
             <Button variant="outline" size="sm" className="bg-primary text-primary-foreground">1</Button>
-            <Button variant="outline" size="sm">2</Button>
             <Button variant="outline" size="sm">Sau</Button>
           </div>
         </div>
