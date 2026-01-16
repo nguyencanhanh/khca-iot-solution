@@ -1,35 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Filter, Search, MoreVertical, Calendar, User, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import type { Database } from "@/integrations/supabase/types";
+
+type TaskStatus = Database["public"]["Enums"]["task_status"];
+type TaskPriority = Database["public"]["Enums"]["task_priority"];
 
 interface Task {
-  id: number;
+  id: string;
   title: string;
-  description: string;
-  status: "todo" | "in_progress" | "done";
-  priority: "high" | "medium" | "low";
-  assignee: string;
-  deadline: string;
-  project: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignee_id: string | null;
+  project_id: string | null;
+  deadline: string | null;
+  created_by: string;
+  created_at: string;
+  assignee?: { full_name: string } | null;
+  project?: { name: string; code: string } | null;
 }
 
-const initialTasks: Task[] = [
-  { id: 1, title: "Triển khai trạm giám sát Bình Dương", description: "Lắp đặt và cấu hình 5 trạm giám sát mới", status: "in_progress", priority: "high", assignee: "Nguyễn Văn B", deadline: "2024-12-20", project: "Dự án BD-01" },
-  { id: 2, title: "Bảo trì FlowMaster #234", description: "Kiểm tra và thay thế cảm biến", status: "todo", priority: "medium", assignee: "Trần Văn C", deadline: "2024-12-22", project: "Bảo trì" },
-  { id: 3, title: "Cập nhật firmware Gateway G4", description: "Nâng cấp firmware lên phiên bản 2.5.1", status: "done", priority: "low", assignee: "Lê Thị D", deadline: "2024-12-15", project: "R&D" },
-  { id: 4, title: "Báo cáo dự án Q4/2024", description: "Tổng hợp và phân tích kết quả Q4", status: "in_progress", priority: "high", assignee: "Phạm Văn E", deadline: "2024-12-25", project: "Quản lý" },
-  { id: 5, title: "Đào tạo nhân sự mới", description: "Hướng dẫn quy trình và công cụ", status: "todo", priority: "medium", assignee: "Nguyễn Văn A", deadline: "2024-12-28", project: "HR" },
-  { id: 6, title: "Khảo sát Đà Nẵng", description: "Khảo sát vị trí lắp đặt trạm mới", status: "todo", priority: "high", assignee: "Hoàng Văn F", deadline: "2024-12-18", project: "Dự án DN-03" },
-  { id: 7, title: "Hoàn thiện tài liệu API", description: "Cập nhật documentation API v3", status: "in_progress", priority: "medium", assignee: "Lê Văn G", deadline: "2024-12-21", project: "R&D" },
-  { id: 8, title: "Review code sprint 12", description: "Kiểm tra và phê duyệt code", status: "done", priority: "medium", assignee: "Trần Thị H", deadline: "2024-12-14", project: "R&D" },
-];
+interface Profile {
+  id: string;
+  full_name: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  code: string;
+}
 
 const columns = [
-  { id: "todo", title: "To Do", color: "bg-info" },
-  { id: "in_progress", title: "In Progress", color: "bg-warning" },
-  { id: "done", title: "Done", color: "bg-success" },
+  { id: "todo" as TaskStatus, title: "To Do", color: "bg-info" },
+  { id: "in_progress" as TaskStatus, title: "In Progress", color: "bg-warning" },
+  { id: "done" as TaskStatus, title: "Done", color: "bg-success" },
 ];
 
 const getPriorityColor = (priority: string) => {
@@ -42,14 +69,78 @@ const getPriorityColor = (priority: string) => {
 };
 
 const Tasks = () => {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const { user } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    priority: "medium" as TaskPriority,
+    assignee_id: "",
+    project_id: "",
+    deadline: "",
+  });
+
+  useEffect(() => {
+    fetchTasks();
+    fetchProfiles();
+    fetchProjects();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select(`
+          *,
+          assignee:profiles!tasks_assignee_id_fkey(full_name),
+          project:projects!tasks_project_id_fkey(name, code)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setTasks(data || []);
+    } catch (error: any) {
+      console.error("Error fetching tasks:", error);
+      toast.error("Lỗi khi tải danh sách công việc");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProfiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name");
+      if (error) throw error;
+      setProfiles(data || []);
+    } catch (error) {
+      console.error("Error fetching profiles:", error);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, code");
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    }
+  };
 
   const filteredTasks = tasks.filter(task => 
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.assignee.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.project.toLowerCase().includes(searchQuery.toLowerCase())
+    task.assignee?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    task.project?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleDragStart = (task: Task) => {
@@ -60,14 +151,71 @@ const Tasks = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (status: "todo" | "in_progress" | "done") => {
-    if (draggedTask) {
-      setTasks(tasks.map(t => 
-        t.id === draggedTask.id ? { ...t, status } : t
-      ));
-      setDraggedTask(null);
+  const handleDrop = async (status: TaskStatus) => {
+    if (draggedTask && draggedTask.status !== status) {
+      try {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ status })
+          .eq("id", draggedTask.id);
+
+        if (error) throw error;
+        
+        setTasks(tasks.map(t => 
+          t.id === draggedTask.id ? { ...t, status } : t
+        ));
+        toast.success("Đã cập nhật trạng thái công việc");
+      } catch (error: any) {
+        console.error("Error updating task:", error);
+        toast.error("Lỗi khi cập nhật trạng thái");
+      }
+    }
+    setDraggedTask(null);
+  };
+
+  const handleCreateTask = async () => {
+    if (!user || !newTask.title.trim()) {
+      toast.error("Vui lòng nhập tiêu đề công việc");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("tasks").insert({
+        title: newTask.title,
+        description: newTask.description || null,
+        priority: newTask.priority,
+        assignee_id: newTask.assignee_id || null,
+        project_id: newTask.project_id || null,
+        deadline: newTask.deadline || null,
+        created_by: user.id,
+      });
+
+      if (error) throw error;
+
+      toast.success("Đã tạo công việc mới");
+      setIsDialogOpen(false);
+      setNewTask({
+        title: "",
+        description: "",
+        priority: "medium",
+        assignee_id: "",
+        project_id: "",
+        deadline: "",
+      });
+      fetchTasks();
+    } catch (error: any) {
+      console.error("Error creating task:", error);
+      toast.error("Lỗi khi tạo công việc");
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -77,10 +225,105 @@ const Tasks = () => {
           <h1 className="font-display text-2xl font-bold text-foreground">Quản lý công việc</h1>
           <p className="text-muted-foreground">Theo dõi và quản lý công việc của đội ngũ</p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4" />
-          Thêm công việc
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4" />
+              Thêm công việc
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Tạo công việc mới</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Tiêu đề *</Label>
+                <Input
+                  id="title"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  placeholder="Nhập tiêu đề công việc"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Mô tả</Label>
+                <Textarea
+                  id="description"
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                  placeholder="Mô tả chi tiết công việc"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Độ ưu tiên</Label>
+                  <Select
+                    value={newTask.priority}
+                    onValueChange={(value: TaskPriority) => setNewTask({ ...newTask, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">Cao</SelectItem>
+                      <SelectItem value="medium">Trung bình</SelectItem>
+                      <SelectItem value="low">Thấp</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deadline">Deadline</Label>
+                  <Input
+                    id="deadline"
+                    type="date"
+                    value={newTask.deadline}
+                    onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Người thực hiện</Label>
+                <Select
+                  value={newTask.assignee_id}
+                  onValueChange={(value) => setNewTask({ ...newTask, assignee_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn người thực hiện" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Dự án</Label>
+                <Select
+                  value={newTask.project_id}
+                  onValueChange={(value) => setNewTask({ ...newTask, project_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn dự án" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name} ({project.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleCreateTask} className="w-full">
+                Tạo công việc
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Filters */}
@@ -107,7 +350,7 @@ const Tasks = () => {
             key={column.id}
             className="space-y-4"
             onDragOver={handleDragOver}
-            onDrop={() => handleDrop(column.id as "todo" | "in_progress" | "done")}
+            onDrop={() => handleDrop(column.id)}
           >
             {/* Column Header */}
             <div className="flex items-center gap-3">
@@ -138,24 +381,30 @@ const Tasks = () => {
                           <MoreVertical className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                        {task.description}
-                      </p>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                          <Tag className="w-3 h-3" />
-                          {task.project}
-                        </span>
-                      </div>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
+                          {task.description}
+                        </p>
+                      )}
+                      {task.project && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                            <Tag className="w-3 h-3" />
+                            {task.project.name}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <User className="w-3 h-3" />
-                          {task.assignee}
+                          {task.assignee?.full_name || "Chưa phân công"}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(task.deadline).toLocaleDateString('vi-VN')}
-                        </div>
+                        {task.deadline && (
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(task.deadline).toLocaleDateString('vi-VN')}
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

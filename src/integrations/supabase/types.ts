@@ -160,6 +160,56 @@ export type Database = {
           },
         ]
       }
+      inventory_items: {
+        Row: {
+          created_at: string
+          created_by: string
+          firmware: string | null
+          id: string
+          location: string
+          name: string
+          notes: string | null
+          project_id: string | null
+          serial: string
+          status: Database["public"]["Enums"]["inventory_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          firmware?: string | null
+          id?: string
+          location: string
+          name: string
+          notes?: string | null
+          project_id?: string | null
+          serial: string
+          status?: Database["public"]["Enums"]["inventory_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          firmware?: string | null
+          id?: string
+          location?: string
+          name?: string
+          notes?: string | null
+          project_id?: string | null
+          serial?: string
+          status?: Database["public"]["Enums"]["inventory_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -236,6 +286,63 @@ export type Database = {
           },
         ]
       }
+      tasks: {
+        Row: {
+          assignee_id: string | null
+          created_at: string
+          created_by: string
+          deadline: string | null
+          description: string | null
+          id: string
+          priority: Database["public"]["Enums"]["task_priority"]
+          project_id: string | null
+          status: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          created_at?: string
+          created_by: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          priority?: Database["public"]["Enums"]["task_priority"]
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_id?: string | null
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          priority?: Database["public"]["Enums"]["task_priority"]
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -275,6 +382,9 @@ export type Database = {
     Enums: {
       app_role: "admin" | "technical" | "accounting" | "manager"
       doc_permission: "view" | "edit"
+      inventory_status: "in_stock" | "deployed" | "deploying" | "maintenance"
+      task_priority: "high" | "medium" | "low"
+      task_status: "todo" | "in_progress" | "done"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -404,6 +514,9 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "technical", "accounting", "manager"],
       doc_permission: ["view", "edit"],
+      inventory_status: ["in_stock", "deployed", "deploying", "maintenance"],
+      task_priority: ["high", "medium", "low"],
+      task_status: ["todo", "in_progress", "done"],
     },
   },
 } as const
