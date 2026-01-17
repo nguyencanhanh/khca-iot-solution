@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { CheckCircle2, Pencil, X, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/useUserRole";
 
 export interface Product {
   id: number;
@@ -37,6 +38,7 @@ const ProductDetailDialog = ({
   onOpenChange,
   onSave,
 }: ProductDetailDialogProps) => {
+  const { isAdmin } = useUserRole();
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product | null>(null);
   const [newFeature, setNewFeature] = useState("");
@@ -91,7 +93,7 @@ const ProductDetailDialog = ({
             <DialogTitle className="text-2xl">
               {isEditing ? "Chỉnh sửa sản phẩm" : "Chi tiết sản phẩm"}
             </DialogTitle>
-            {!isEditing && (
+            {!isEditing && isAdmin && (
               <Button variant="outline" size="sm" onClick={handleEdit}>
                 <Pencil className="w-4 h-4 mr-2" />
                 Chỉnh sửa
