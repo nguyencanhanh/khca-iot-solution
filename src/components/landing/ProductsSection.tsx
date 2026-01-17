@@ -1,39 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import ProductDetailDialog, { Product } from "./ProductDetailDialog";
 
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "AquaSense Pro",
-    category: "Cảm biến đa thông số",
-    description: "Đo pH, DO, độ đục, nhiệt độ trong một thiết bị compact.",
-    features: ["IP68 chống nước", "Pin 2 năm", "LoRa/NB-IoT", "Auto-calibration"],
-    highlighted: false,
-  },
-  {
-    id: 2,
-    name: "FlowMaster 5000",
-    category: "Đồng hồ đo lưu lượng",
-    description: "Đồng hồ siêu âm chính xác cao cho ống DN50-DN2000.",
-    features: ["Độ chính xác ±0.5%", "Không tiếp xúc", "Data logging 1 năm", "RS485/Modbus"],
-    highlighted: true,
-  },
-  {
-    id: 3,
-    name: "IoT Gateway G4",
-    category: "Thiết bị trung tâm",
-    description: "Gateway công nghiệp kết nối đa giao thức, xử lý edge computing.",
-    features: ["4G/LTE/WiFi/Ethernet", "Edge AI", "128 thiết bị", "99.99% uptime"],
-    highlighted: false,
-  },
-];
-
 const ProductsSection = () => {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("highlighted", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching products:", error);
+      } else {
+        // Map database products to component format
+        const mappedProducts: Product[] = (data || []).map((p, index) => ({
+          id: index + 1,
+          dbId: p.id,
+          name: p.name,
+          category: p.category,
+          description: p.description || "",
+          features: p.features || [],
+          highlighted: p.highlighted,
+        }));
+        setProducts(mappedProducts);
+      }
+      setLoading(false);
+    };
+
+    fetchProducts();
+  }, []);
 
   const handleViewDetail = (product: Product) => {
     setSelectedProduct(product);
@@ -46,6 +50,16 @@ const ProductsSection = () => {
     );
     setSelectedProduct(updatedProduct);
   };
+
+  if (loading) {
+    return (
+      <section id="products" className="py-24 bg-muted/30">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-muted-foreground">Đang tải sản phẩm...</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="products" className="py-24 bg-muted/30">

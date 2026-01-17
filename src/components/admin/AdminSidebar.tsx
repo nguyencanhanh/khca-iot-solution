@@ -17,9 +17,10 @@ import { useAuth } from "@/hooks/useAuth";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Tổng quan", path: "/admin" },
+  { icon: Package, label: "Sản phẩm", path: "/admin/products" },
   { icon: FileText, label: "Tài liệu", path: "/admin/documents" },
   { icon: CheckSquare, label: "Công việc", path: "/admin/tasks" },
-  { icon: Package, label: "Kho hàng", path: "/admin/inventory" },
+  { icon: Droplets, label: "Kho hàng", path: "/admin/inventory" },
   { icon: DollarSign, label: "Thu chi", path: "/admin/finance" },
   { icon: Users, label: "Người dùng", path: "/admin/users" },
 ];
