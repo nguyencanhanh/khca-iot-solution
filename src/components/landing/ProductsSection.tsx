@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
+import ProductDetailDialog, { Product } from "./ProductDetailDialog";
 
-const products = [
+const initialProducts: Product[] = [
   {
+    id: 1,
     name: "AquaSense Pro",
     category: "Cảm biến đa thông số",
     description: "Đo pH, DO, độ đục, nhiệt độ trong một thiết bị compact.",
@@ -10,6 +13,7 @@ const products = [
     highlighted: false,
   },
   {
+    id: 2,
     name: "FlowMaster 5000",
     category: "Đồng hồ đo lưu lượng",
     description: "Đồng hồ siêu âm chính xác cao cho ống DN50-DN2000.",
@@ -17,6 +21,7 @@ const products = [
     highlighted: true,
   },
   {
+    id: 3,
     name: "IoT Gateway G4",
     category: "Thiết bị trung tâm",
     description: "Gateway công nghiệp kết nối đa giao thức, xử lý edge computing.",
@@ -26,6 +31,22 @@ const products = [
 ];
 
 const ProductsSection = () => {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleViewDetail = (product: Product) => {
+    setSelectedProduct(product);
+    setDialogOpen(true);
+  };
+
+  const handleSaveProduct = (updatedProduct: Product) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+    );
+    setSelectedProduct(updatedProduct);
+  };
+
   return (
     <section id="products" className="py-24 bg-muted/30">
       <div className="container mx-auto px-4">
@@ -45,9 +66,9 @@ const ProductsSection = () => {
 
         {/* Products Grid */}
         <div className="grid lg:grid-cols-3 gap-8">
-          {products.map((product, index) => (
+          {products.map((product) => (
             <div
-              key={index}
+              key={product.id}
               className={`relative bg-card rounded-2xl overflow-hidden border transition-all duration-300 hover:shadow-xl ${
                 product.highlighted 
                   ? 'border-primary shadow-glow' 
@@ -94,6 +115,7 @@ const ProductsSection = () => {
                 <Button 
                   variant={product.highlighted ? "default" : "outline"} 
                   className="w-full"
+                  onClick={() => handleViewDetail(product)}
                 >
                   Xem chi tiết
                   <ArrowRight className="w-4 h-4" />
@@ -103,6 +125,14 @@ const ProductsSection = () => {
           ))}
         </div>
       </div>
+
+      {/* Product Detail Dialog */}
+      <ProductDetailDialog
+        product={selectedProduct}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSave={handleSaveProduct}
+      />
     </section>
   );
 };
