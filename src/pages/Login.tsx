@@ -149,12 +149,6 @@ const Login = () => {
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-muted-foreground">
-            Chưa có tài khoản?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Đăng ký
-            </Link>
-          </p>
         </div>
       </div>
     </div>
