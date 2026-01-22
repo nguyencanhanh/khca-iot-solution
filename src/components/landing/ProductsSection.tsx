@@ -30,6 +30,7 @@ const ProductsSection = () => {
           description: p.description || "",
           features: p.features || [],
           highlighted: p.highlighted,
+          imageUrl: p.image_url,
         }));
         setProducts(mappedProducts);
       }
@@ -96,12 +97,23 @@ const ProductsSection = () => {
                 </div>
               )}
 
-              {/* Product Image Placeholder */}
-              <div className="h-48 bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
-                <div className="w-32 h-32 rounded-2xl bg-white/80 shadow-lg flex items-center justify-center">
-                  <div className="w-16 h-16 rounded-xl bg-primary/20" />
+              {/* Product Image */}
+              {product.imageUrl ? (
+                <div className="h-48 overflow-hidden">
+                  <img
+                    src={product.imageUrl}
+                    alt={`Ảnh sản phẩm ${product.name}`}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="h-48 bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-2xl bg-white/80 shadow-lg flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-xl bg-primary/20" />
+                  </div>
+                </div>
+              )}
 
               {/* Content */}
               <div className="p-6">
