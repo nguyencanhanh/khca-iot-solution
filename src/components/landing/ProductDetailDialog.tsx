@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,25 @@ const ProductDetailDialog = ({
   const [editedProduct, setEditedProduct] = useState<Product | null>(null);
   const [newFeature, setNewFeature] = useState("");
 
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+
+  useEffect(() => {
+    // Reset per-open state
+    if (!open) {
+      setIsEditing(false);
+      setEditedProduct(null);
+      setNewFeature("");
+      setIsEditingDescription(false);
+      setDescriptionDraft("");
+      return;
+    }
+
+    if (product) {
+      setDescriptionDraft(product.description ?? "");
+    }
+  }, [open, product]);
+
   const handleEdit = () => {
     setEditedProduct(product);
     setIsEditing(true);
@@ -51,6 +70,25 @@ const ProductDetailDialog = ({
   const handleCancel = () => {
     setEditedProduct(null);
     setIsEditing(false);
+  };
+
+  const handleStartEditDescription = () => {
+    if (!product) return;
+    setDescriptionDraft(product.description ?? "");
+    setIsEditingDescription(true);
+  };
+
+  const handleCancelEditDescription = () => {
+    setIsEditingDescription(false);
+    setDescriptionDraft(product?.description ?? "");
+  };
+
+  const handleSaveDescription = () => {
+    if (!product) return;
+    const next = { ...product, description: descriptionDraft };
+    onSave(next);
+    setIsEditingDescription(false);
+    toast.success("Đã lưu mô tả sản phẩm");
   };
 
   const handleSave = () => {
@@ -223,7 +261,39 @@ const ProductDetailDialog = ({
                 )}
               </div>
 
-              <p className="text-muted-foreground">{displayProduct.description}</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-semibold text-foreground">Mô tả</h4>
+                  {isAdmin && !isEditingDescription && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStartEditDescription}
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Sửa mô tả
+                    </Button>
+                  )}
+                </div>
+
+                {isAdmin && isEditingDescription ? (
+                  <div className="space-y-3">
+                    <Textarea
+                      value={descriptionDraft}
+                      onChange={(e) => setDescriptionDraft(e.target.value)}
+                      rows={4}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={handleCancelEditDescription}>
+                        Hủy
+                      </Button>
+                      <Button onClick={handleSaveDescription}>Lưu</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">{displayProduct.description}</p>
+                )}
+              </div>
 
               <div>
                 <h4 className="font-semibold text-foreground mb-3">Tính năng</h4>
