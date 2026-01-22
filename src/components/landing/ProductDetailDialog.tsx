@@ -18,11 +18,13 @@ import { useUserRole } from "@/hooks/useUserRole";
 
 export interface Product {
   id: number;
+  dbId?: string;
   name: string;
   category: string;
   description: string;
   features: string[];
   highlighted: boolean;
+  imageUrl?: string | null;
 }
 
 interface ProductDetailDialogProps {
@@ -146,12 +148,23 @@ const ProductDetailDialog = ({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Product Image Placeholder */}
-          <div className="h-48 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl flex items-center justify-center">
-            <div className="w-32 h-32 rounded-2xl bg-white/80 shadow-lg flex items-center justify-center">
-              <div className="w-16 h-16 rounded-xl bg-primary/20" />
+          {/* Product Image */}
+          {displayProduct.imageUrl ? (
+            <div className="h-48 rounded-xl overflow-hidden border bg-muted/20">
+              <img
+                src={displayProduct.imageUrl}
+                alt={`Ảnh sản phẩm ${displayProduct.name}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
             </div>
-          </div>
+          ) : (
+            <div className="h-48 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl flex items-center justify-center">
+              <div className="w-32 h-32 rounded-2xl bg-white/80 shadow-lg flex items-center justify-center">
+                <div className="w-16 h-16 rounded-xl bg-primary/20" />
+              </div>
+            </div>
+          )}
 
           {/* Product Info */}
           {isEditing ? (

@@ -63,6 +63,8 @@ interface Product {
   created_at: string;
 }
 
+const PRODUCT_IMAGE_BUCKET = "product-images";
+
 const Products = () => {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -72,6 +74,9 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [newFeature, setNewFeature] = useState("");
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -113,6 +118,8 @@ const Products = () => {
       price: "",
     });
     setNewFeature("");
+    setImageFile(null);
+    setImagePreviewUrl(null);
   };
 
   const handleOpenCreate = () => {
@@ -131,7 +138,42 @@ const Products = () => {
       highlighted: product.highlighted,
       price: product.price?.toString() || "",
     });
+    setImageFile(null);
+    setImagePreviewUrl(product.image_url);
     setDialogOpen(true);
+  };
+
+  const handleImageChange = (file: File | null) => {
+    setImageFile(file);
+    if (!file) {
+      setImagePreviewUrl(editingProduct?.image_url ?? null);
+      return;
+    }
+
+    setImagePreviewUrl((prev) => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return prev;
+    });
+    const url = URL.createObjectURL(file);
+    setImagePreviewUrl(url);
+  };
+
+  const uploadProductImage = async (productId: string, file: File) => {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const safeExt = ext.replace(/[^a-z0-9]/g, "");
+    const path = `products/${productId}/${Date.now()}.${safeExt || "jpg"}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(PRODUCT_IMAGE_BUCKET)
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
   };
 
   const handleAddFeature = () => {
@@ -177,17 +219,49 @@ const Products = () => {
         toast.error("Lỗi cập nhật sản phẩm");
         console.error(error);
       } else {
+        if (imageFile) {
+          try {
+            const publicUrl = await uploadProductImage(editingProduct.id, imageFile);
+            const { error: imageError } = await supabase
+              .from("products")
+              .update({ image_url: publicUrl })
+              .eq("id", editingProduct.id);
+            if (imageError) throw imageError;
+          } catch (e) {
+            console.error(e);
+            toast.error("Upload ảnh thất bại");
+            return;
+          }
+        }
         toast.success("Đã cập nhật sản phẩm");
         setDialogOpen(false);
         fetchProducts();
       }
     } else {
-      const { error } = await supabase.from("products").insert(productData);
+      const { data: created, error } = await supabase
+        .from("products")
+        .insert(productData)
+        .select("*")
+        .single();
 
       if (error) {
         toast.error("Lỗi thêm sản phẩm");
         console.error(error);
       } else {
+        if (imageFile && created?.id) {
+          try {
+            const publicUrl = await uploadProductImage(created.id, imageFile);
+            const { error: imageError } = await supabase
+              .from("products")
+              .update({ image_url: publicUrl })
+              .eq("id", created.id);
+            if (imageError) throw imageError;
+          } catch (e) {
+            console.error(e);
+            toast.error("Upload ảnh thất bại");
+            // vẫn tạo sản phẩm thành công, nên không return
+          }
+        }
         toast.success("Đã thêm sản phẩm mới");
         setDialogOpen(false);
         fetchProducts();
@@ -394,6 +468,29 @@ const Products = () => {
                 placeholder="Mô tả ngắn về sản phẩm..."
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="image">Ảnh sản phẩm</Label>
+              <Input
+                id="image"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageChange(e.target.files?.[0] ?? null)}
+              />
+              {imagePreviewUrl && (
+                <div className="mt-2 overflow-hidden rounded-lg border bg-muted/20">
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Ảnh sản phẩm"
+                    className="h-44 w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Hỗ trợ JPG/PNG/WebP. Ảnh sẽ hiển thị trên Landing page.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
