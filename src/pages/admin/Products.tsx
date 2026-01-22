@@ -73,6 +73,7 @@ const Products = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [productToRemoveImage, setProductToRemoveImage] = useState<Product | null>(null);
   const [newFeature, setNewFeature] = useState("");
 
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -156,6 +157,54 @@ const Products = () => {
     });
     const url = URL.createObjectURL(file);
     setImagePreviewUrl(url);
+  };
+
+  const getStoragePathFromPublicUrl = (publicUrl: string) => {
+    // Expected format: .../storage/v1/object/public/<bucket>/<path>
+    const marker = `/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    const path = publicUrl.slice(idx + marker.length);
+    return path || null;
+  };
+
+  const removeProductImage = async (product: Product) => {
+    if (!product.image_url) {
+      toast.error("Sản phẩm chưa có ảnh");
+      return;
+    }
+
+    try {
+      const path = getStoragePathFromPublicUrl(product.image_url);
+      if (!path) {
+        toast.error("Không xác định được đường dẫn ảnh để xóa");
+        return;
+      }
+
+      const { error: removeError } = await supabase.storage
+        .from(PRODUCT_IMAGE_BUCKET)
+        .remove([path]);
+      if (removeError) throw removeError;
+
+      const { error: dbError } = await supabase
+        .from("products")
+        .update({ image_url: null })
+        .eq("id", product.id);
+      if (dbError) throw dbError;
+
+      // Reset local preview (if currently editing the same product)
+      if (editingProduct?.id === product.id) {
+        setImageFile(null);
+        setImagePreviewUrl(null);
+      }
+
+      toast.success("Đã xóa ảnh sản phẩm");
+      setProductToRemoveImage(null);
+      fetchProducts();
+    } catch (e) {
+      console.error(e);
+      toast.error("Xóa ảnh thất bại");
+    }
   };
 
   const uploadProductImage = async (productId: string, file: File) => {
@@ -488,6 +537,19 @@ const Products = () => {
                   />
                 </div>
               )}
+              {editingProduct?.image_url && !imageFile && (
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setProductToRemoveImage(editingProduct)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Xóa ảnh
+                  </Button>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Hỗ trợ JPG/PNG/WebP. Ảnh sẽ hiển thị trên Landing page.
               </p>
@@ -583,6 +645,33 @@ const Products = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Image Confirmation */}
+      <AlertDialog
+        open={!!productToRemoveImage}
+        onOpenChange={() => setProductToRemoveImage(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa ảnh</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa ảnh của sản phẩm "{productToRemoveImage?.name}"?
+              Ảnh sẽ bị gỡ khỏi hệ thống lưu trữ và không thể khôi phục.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                productToRemoveImage && removeProductImage(productToRemoveImage)
+              }
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Xóa ảnh
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
