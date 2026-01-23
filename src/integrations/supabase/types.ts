@@ -50,20 +50,31 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          parent_id: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
           name: string
+          parent_id?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "departments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       document_permissions: {
         Row: {
@@ -112,6 +123,7 @@ export type Database = {
           is_public: boolean
           name: string
           project_id: string | null
+          sub_department_id: string | null
           updated_at: string
           uploaded_by: string | null
         }
@@ -126,6 +138,7 @@ export type Database = {
           is_public?: boolean
           name: string
           project_id?: string | null
+          sub_department_id?: string | null
           updated_at?: string
           uploaded_by?: string | null
         }
@@ -140,6 +153,7 @@ export type Database = {
           is_public?: boolean
           name?: string
           project_id?: string | null
+          sub_department_id?: string | null
           updated_at?: string
           uploaded_by?: string | null
         }
@@ -156,6 +170,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_sub_department_id_fkey"
+            columns: ["sub_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
         ]
@@ -260,6 +281,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          sub_department_id: string | null
           updated_at: string
           user_id: string
         }
@@ -270,6 +292,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          sub_department_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -280,6 +303,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          sub_department_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -287,6 +311,13 @@ export type Database = {
           {
             foreignKeyName: "profiles_department_id_fkey"
             columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_sub_department_id_fkey"
+            columns: ["sub_department_id"]
             isOneToOne: false
             referencedRelation: "departments"
             referencedColumns: ["id"]
