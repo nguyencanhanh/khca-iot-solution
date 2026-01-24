@@ -16,7 +16,8 @@ import {
   Trash2,
   Share2,
   Grid,
-  List
+  List,
+  Settings
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,9 +44,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { DepartmentManager, Department } from "@/components/admin/DepartmentManager";
 
 interface Document {
   id: string;
@@ -55,16 +58,12 @@ interface Document {
   file_size: number;
   file_type: string;
   department_id: string | null;
+  sub_department_id: string | null;
   project_id: string | null;
   uploaded_by: string | null;
   is_public: boolean;
   created_at: string;
   updated_at: string;
-}
-
-interface Department {
-  id: string;
-  name: string;
 }
 
 interface Project {
@@ -96,10 +95,12 @@ const Documents = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [subDepartmentFilter, setSubDepartmentFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState("upload");
 
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
@@ -107,15 +108,43 @@ const Documents = () => {
     name: "",
     description: "",
     department_id: "",
+    sub_department_id: "",
     project_id: "",
     is_public: false
   });
+
+  // Get main departments (parent_id is null)
+  const mainDepartments = departments.filter(d => d.parent_id === null);
+  
+  // Get sub-departments for selected main department
+  const getSubDepartments = (parentId: string | null) => {
+    if (!parentId) return [];
+    return departments.filter(d => d.parent_id === parentId);
+  };
+
+  // Sub-departments for upload form
+  const uploadSubDepartments = getSubDepartments(uploadForm.department_id || null);
+  
+  // Sub-departments for filter
+  const filterSubDepartments = departmentFilter !== "all" 
+    ? getSubDepartments(departmentFilter) 
+    : [];
 
   useEffect(() => {
     fetchDocuments();
     fetchDepartments();
     fetchProjects();
   }, []);
+
+  // Reset sub-department when main department changes in upload form
+  useEffect(() => {
+    setUploadForm(prev => ({ ...prev, sub_department_id: "" }));
+  }, [uploadForm.department_id]);
+
+  // Reset sub-department filter when main department filter changes
+  useEffect(() => {
+    setSubDepartmentFilter("all");
+  }, [departmentFilter]);
 
   const fetchDocuments = async () => {
     try {
@@ -138,7 +167,7 @@ const Documents = () => {
     try {
       const { data, error } = await supabase
         .from('departments')
-        .select('id, name')
+        .select('id, name, parent_id, created_at')
         .order('name');
       
       if (error) throw error;
@@ -202,6 +231,7 @@ const Documents = () => {
           file_size: uploadForm.file.size,
           file_type: uploadForm.file.type,
           department_id: uploadForm.department_id || null,
+          sub_department_id: uploadForm.sub_department_id || null,
           project_id: uploadForm.project_id || null,
           uploaded_by: user.id,
           is_public: uploadForm.is_public
@@ -216,9 +246,11 @@ const Documents = () => {
         name: "",
         description: "",
         department_id: "",
+        sub_department_id: "",
         project_id: "",
         is_public: false
       });
+      setActiveTab("upload");
       fetchDocuments();
     } catch (error: any) {
       console.error('Error uploading document:', error);
@@ -278,13 +310,23 @@ const Documents = () => {
       doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (doc.description?.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesDepartment = departmentFilter === "all" || doc.department_id === departmentFilter;
+    const matchesSubDepartment = subDepartmentFilter === "all" || doc.sub_department_id === subDepartmentFilter;
     const matchesProject = projectFilter === "all" || doc.project_id === projectFilter;
-    return matchesSearch && matchesDepartment && matchesProject;
+    return matchesSearch && matchesDepartment && matchesSubDepartment && matchesProject;
   });
 
   const getDepartmentName = (id: string | null) => {
     if (!id) return null;
     return departments.find(d => d.id === id)?.name;
+  };
+
+  const getFullDepartmentPath = (deptId: string | null, subDeptId: string | null) => {
+    const deptName = getDepartmentName(deptId);
+    const subDeptName = getDepartmentName(subDeptId);
+    if (deptName && subDeptName) {
+      return `${deptName} / ${subDeptName}`;
+    }
+    return deptName || subDeptName || null;
   };
 
   const getProjectName = (id: string | null) => {
@@ -308,85 +350,125 @@ const Documents = () => {
               Upload tài liệu
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Upload tài liệu mới</DialogTitle>
+              <DialogTitle>Quản lý tài liệu</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* File Input */}
-              <div className="space-y-2">
-                <Label>Chọn file *</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
-                  <input
-                    type="file"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    {uploadForm.file ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <File className="w-8 h-8 text-primary" />
-                        <div className="text-left">
-                          <div className="font-medium">{uploadForm.file.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatFileSize(uploadForm.file.size)}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="upload">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </TabsTrigger>
+                <TabsTrigger value="departments">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Phòng ban
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="upload" className="space-y-4 pt-4">
+                {/* File Input */}
+                <div className="space-y-2">
+                  <Label>Chọn file *</Label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                    <input
+                      type="file"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      {uploadForm.file ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <File className="w-8 h-8 text-primary" />
+                          <div className="text-left">
+                            <div className="font-medium">{uploadForm.file.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatFileSize(uploadForm.file.size)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">
-                          Click để chọn file hoặc kéo thả vào đây
-                        </p>
-                      </>
-                    )}
-                  </label>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            Click để chọn file hoặc kéo thả vào đây
+                          </p>
+                        </>
+                      )}
+                    </label>
+                  </div>
                 </div>
-              </div>
 
-              {/* Name */}
-              <div className="space-y-2">
-                <Label>Tên tài liệu</Label>
-                <Input
-                  value={uploadForm.name}
-                  onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
-                  placeholder="Tên hiển thị của tài liệu"
-                />
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label>Mô tả</Label>
-                <Textarea
-                  value={uploadForm.description}
-                  onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                  placeholder="Mô tả ngắn về tài liệu"
-                  rows={2}
-                />
-              </div>
-
-              {/* Department & Project */}
-              <div className="grid grid-cols-2 gap-4">
+                {/* Name */}
                 <div className="space-y-2">
-                  <Label>Phòng ban</Label>
-                  <Select
-                    value={uploadForm.department_id}
-                    onValueChange={(value) => setUploadForm({ ...uploadForm, department_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn phòng ban" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Tên tài liệu</Label>
+                  <Input
+                    value={uploadForm.name}
+                    onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                    placeholder="Tên hiển thị của tài liệu"
+                  />
                 </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                  <Label>Mô tả</Label>
+                  <Textarea
+                    value={uploadForm.description}
+                    onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                    placeholder="Mô tả ngắn về tài liệu"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Department & Sub-department */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Phòng ban</Label>
+                    <Select
+                      value={uploadForm.department_id}
+                      onValueChange={(value) => setUploadForm({ ...uploadForm, department_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn phòng ban" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mainDepartments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phòng nhỏ</Label>
+                    <Select
+                      value={uploadForm.sub_department_id}
+                      onValueChange={(value) => setUploadForm({ ...uploadForm, sub_department_id: value })}
+                      disabled={!uploadForm.department_id || uploadSubDepartments.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          !uploadForm.department_id 
+                            ? "Chọn phòng ban trước" 
+                            : uploadSubDepartments.length === 0 
+                              ? "Không có phòng nhỏ" 
+                              : "Chọn phòng nhỏ"
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uploadSubDepartments.map((subDept) => (
+                          <SelectItem key={subDept.id} value={subDept.id}>
+                            {subDept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Project */}
                 <div className="space-y-2">
                   <Label>Dự án</Label>
                   <Select
@@ -394,7 +476,7 @@ const Documents = () => {
                     onValueChange={(value) => setUploadForm({ ...uploadForm, project_id: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Chọn dự án" />
+                      <SelectValue placeholder="Chọn dự án (tùy chọn)" />
                     </SelectTrigger>
                     <SelectContent>
                       {projects.map((proj) => (
@@ -405,30 +487,37 @@ const Documents = () => {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              {/* Public checkbox */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is-public"
-                  checked={uploadForm.is_public}
-                  onChange={(e) => setUploadForm({ ...uploadForm, is_public: e.target.checked })}
-                  className="w-4 h-4 rounded border-input"
+                {/* Public checkbox */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is-public"
+                    checked={uploadForm.is_public}
+                    onChange={(e) => setUploadForm({ ...uploadForm, is_public: e.target.checked })}
+                    className="w-4 h-4 rounded border-input"
+                  />
+                  <Label htmlFor="is-public" className="text-sm cursor-pointer">
+                    Công khai cho tất cả nhân viên
+                  </Label>
+                </div>
+
+                <Button 
+                  onClick={handleUpload} 
+                  disabled={!uploadForm.file || uploading}
+                  className="w-full"
+                >
+                  {uploading ? "Đang upload..." : "Upload tài liệu"}
+                </Button>
+              </TabsContent>
+              
+              <TabsContent value="departments" className="pt-4">
+                <DepartmentManager 
+                  departments={departments} 
+                  onDepartmentsChange={fetchDepartments} 
                 />
-                <Label htmlFor="is-public" className="text-sm cursor-pointer">
-                  Công khai cho tất cả nhân viên
-                </Label>
-              </div>
-
-              <Button 
-                onClick={handleUpload} 
-                disabled={!uploadForm.file || uploading}
-                className="w-full"
-              >
-                {uploading ? "Đang upload..." : "Upload tài liệu"}
-              </Button>
-            </div>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       </div>
@@ -452,7 +541,7 @@ const Documents = () => {
               <Folder className="w-5 h-5 text-success" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-foreground">{departments.length}</div>
+              <div className="text-2xl font-bold text-foreground">{mainDepartments.length}</div>
               <div className="text-sm text-muted-foreground">Phòng ban</div>
             </div>
           </div>
@@ -495,20 +584,35 @@ const Documents = () => {
           />
         </div>
         <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Phòng ban" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả phòng ban</SelectItem>
-            {departments.map((dept) => (
+            {mainDepartments.map((dept) => (
               <SelectItem key={dept.id} value={dept.id}>
                 {dept.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {departmentFilter !== "all" && filterSubDepartments.length > 0 && (
+          <Select value={subDepartmentFilter} onValueChange={setSubDepartmentFilter}>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue placeholder="Phòng nhỏ" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả phòng nhỏ</SelectItem>
+              {filterSubDepartments.map((subDept) => (
+                <SelectItem key={subDept.id} value={subDept.id}>
+                  {subDept.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Dự án" />
           </SelectTrigger>
           <SelectContent>
@@ -598,7 +702,7 @@ const Documents = () => {
                         </div>
                       </td>
                       <td className="text-muted-foreground">
-                        {getDepartmentName(doc.department_id) || "-"}
+                        {getFullDepartmentPath(doc.department_id, doc.sub_department_id) || "-"}
                       </td>
                       <td className="text-muted-foreground">
                         {getProjectName(doc.project_id) || "-"}
@@ -696,11 +800,11 @@ const Documents = () => {
                   <span>{formatFileSize(doc.file_size)}</span>
                   <span>{new Date(doc.created_at).toLocaleDateString('vi-VN')}</span>
                 </div>
-                {(getDepartmentName(doc.department_id) || doc.is_public) && (
+                {(getFullDepartmentPath(doc.department_id, doc.sub_department_id) || doc.is_public) && (
                   <div className="flex flex-wrap gap-1 mt-3">
-                    {getDepartmentName(doc.department_id) && (
+                    {getFullDepartmentPath(doc.department_id, doc.sub_department_id) && (
                       <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                        {getDepartmentName(doc.department_id)}
+                        {getFullDepartmentPath(doc.department_id, doc.sub_department_id)}
                       </span>
                     )}
                     {doc.is_public && (
