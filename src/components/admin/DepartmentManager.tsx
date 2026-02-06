@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Plus, Trash2, ChevronRight, Building2, FolderOpen } from "lucide-react";
+import { Plus, Trash2, ChevronRight, Building2, FolderOpen, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Collapsible,
   CollapsibleContent,
@@ -37,17 +36,26 @@ interface DepartmentManagerProps {
 
 export function DepartmentManager({ departments, onDepartmentsChange }: DepartmentManagerProps) {
   const [newDeptName, setNewDeptName] = useState("");
-  const [newSubDeptName, setNewSubDeptName] = useState("");
-  const [addingSubTo, setAddingSubTo] = useState<string | null>(null);
+  const [newChildName, setNewChildName] = useState("");
+  const [addingChildTo, setAddingChildTo] = useState<string | null>(null);
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  // Get main departments (parent_id is null)
-  const mainDepartments = departments.filter(d => d.parent_id === null);
+  // Level 0: Root departments (parent_id is null)
+  const rootDepartments = departments.filter(d => d.parent_id === null);
   
-  // Get sub-departments for a main department
-  const getSubDepartments = (parentId: string) => 
+  // Get children of any department
+  const getChildren = (parentId: string) => 
     departments.filter(d => d.parent_id === parentId);
+
+  // Get level of a department (0 = root, 1 = child, 2 = grandchild)
+  const getDeptLevel = (dept: Department): number => {
+    if (!dept.parent_id) return 0;
+    const parent = departments.find(d => d.id === dept.parent_id);
+    if (!parent) return 0;
+    if (!parent.parent_id) return 1;
+    return 2;
+  };
 
   const toggleExpand = (deptId: string) => {
     const newExpanded = new Set(expandedDepts);
@@ -59,7 +67,7 @@ export function DepartmentManager({ departments, onDepartmentsChange }: Departme
     setExpandedDepts(newExpanded);
   };
 
-  const handleAddMainDept = async () => {
+  const handleAddRootDept = async () => {
     if (!newDeptName.trim()) {
       toast.error("Vui lòng nhập tên phòng ban");
       return;
@@ -88,39 +96,40 @@ export function DepartmentManager({ departments, onDepartmentsChange }: Departme
     }
   };
 
-  const handleAddSubDept = async (parentId: string) => {
-    if (!newSubDeptName.trim()) {
-      toast.error("Vui lòng nhập tên phòng nhỏ");
+  const handleAddChild = async (parentId: string, parentLevel: number) => {
+    if (!newChildName.trim()) {
+      const levelName = parentLevel === 0 ? "bộ phận" : "tổ";
+      toast.error(`Vui lòng nhập tên ${levelName}`);
       return;
     }
 
     try {
       const { error } = await supabase
         .from("departments")
-        .insert({ name: newSubDeptName.trim(), parent_id: parentId });
+        .insert({ name: newChildName.trim(), parent_id: parentId });
 
       if (error) {
         if (error.code === "23505") {
-          toast.error("Tên phòng nhỏ đã tồn tại trong phòng ban này");
+          toast.error("Tên đã tồn tại trong cấp này");
         } else {
           throw error;
         }
         return;
       }
 
-      toast.success("Đã thêm phòng nhỏ");
-      setNewSubDeptName("");
-      setAddingSubTo(null);
-      // Auto expand the parent
+      const levelName = parentLevel === 0 ? "bộ phận" : "tổ";
+      toast.success(`Đã thêm ${levelName}`);
+      setNewChildName("");
+      setAddingChildTo(null);
       setExpandedDepts(prev => new Set([...prev, parentId]));
       onDepartmentsChange();
     } catch (error: any) {
-      console.error("Error adding sub-department:", error);
-      toast.error("Lỗi thêm phòng nhỏ: " + error.message);
+      console.error("Error adding child:", error);
+      toast.error("Lỗi thêm: " + error.message);
     }
   };
 
-  const handleDeleteDept = async (dept: Department) => {
+  const handleDelete = async (dept: Department) => {
     setDeleting(dept.id);
     try {
       const { error } = await supabase
@@ -130,202 +139,223 @@ export function DepartmentManager({ departments, onDepartmentsChange }: Departme
 
       if (error) {
         if (error.code === "23503") {
-          toast.error(
-            dept.parent_id 
-              ? "Không thể xóa: phòng nhỏ đang được sử dụng bởi tài liệu hoặc profile"
-              : "Không thể xóa: phòng ban đang có phòng nhỏ hoặc đang được sử dụng"
-          );
+          const level = getDeptLevel(dept);
+          const messages = [
+            "Không thể xóa: phòng ban đang có bộ phận hoặc đang được sử dụng",
+            "Không thể xóa: bộ phận đang có tổ hoặc đang được sử dụng",
+            "Không thể xóa: tổ đang được sử dụng bởi tài liệu hoặc profile"
+          ];
+          toast.error(messages[level] || "Không thể xóa");
         } else {
           throw error;
         }
         return;
       }
 
-      toast.success(`Đã xóa ${dept.parent_id ? "phòng nhỏ" : "phòng ban"}`);
+      const level = getDeptLevel(dept);
+      const names = ["phòng ban", "bộ phận", "tổ"];
+      toast.success(`Đã xóa ${names[level]}`);
       onDepartmentsChange();
     } catch (error: any) {
-      console.error("Error deleting department:", error);
+      console.error("Error deleting:", error);
       toast.error("Lỗi xóa: " + error.message);
     } finally {
       setDeleting(null);
     }
   };
 
+  const getLevelIcon = (level: number) => {
+    switch (level) {
+      case 0: return Building2;
+      case 1: return FolderOpen;
+      case 2: return Users;
+      default: return FolderOpen;
+    }
+  };
+
+  const getLevelLabel = (level: number) => {
+    switch (level) {
+      case 0: return { name: "phòng ban", child: "bộ phận" };
+      case 1: return { name: "bộ phận", child: "tổ" };
+      case 2: return { name: "tổ", child: null };
+      default: return { name: "mục", child: null };
+    }
+  };
+
+  // Recursive render for department tree
+  const renderDepartment = (dept: Department, level: number) => {
+    const children = getChildren(dept.id);
+    const isExpanded = expandedDepts.has(dept.id);
+    const isAddingChild = addingChildTo === dept.id;
+    const Icon = getLevelIcon(level);
+    const labels = getLevelLabel(level);
+    const canAddChild = level < 2; // Max 3 levels (0, 1, 2)
+
+    return (
+      <Collapsible
+        key={dept.id}
+        open={isExpanded}
+        onOpenChange={() => toggleExpand(dept.id)}
+      >
+        <div className={cn(
+          "flex items-center gap-1 p-2 rounded-md hover:bg-muted/50 group",
+          level > 0 && "ml-4"
+        )}>
+          {(canAddChild || children.length > 0) ? (
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+                <ChevronRight
+                  className={cn(
+                    "w-4 h-4 transition-transform",
+                    isExpanded && "rotate-90"
+                  )}
+                />
+              </Button>
+            </CollapsibleTrigger>
+          ) : (
+            <div className="w-6" />
+          )}
+          <Icon className={cn(
+            "w-4 h-4 shrink-0",
+            level === 0 ? "text-primary" : level === 1 ? "text-blue-500" : "text-green-500"
+          )} />
+          <span className="flex-1 text-sm font-medium truncate">
+            {dept.name}
+          </span>
+          {canAddChild && (
+            <span className="text-xs text-muted-foreground">
+              {children.length} {labels.child}
+            </span>
+          )}
+          {canAddChild && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAddingChildTo(isAddingChild ? null : dept.id);
+                setNewChildName("");
+              }}
+              title={`Thêm ${labels.child}`}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                disabled={deleting === dept.id}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Xóa {labels.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Bạn có chắc muốn xóa {labels.name} "{dept.name}"? Hành động này không thể hoàn tác.
+                  {canAddChild && ` Lưu ý: Không thể xóa nếu đang có ${labels.child} hoặc đang được sử dụng.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Hủy</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleDelete(dept)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Xóa
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        <CollapsibleContent>
+          <div className={cn("pl-2 border-l border-border space-y-1", level > 0 ? "ml-6" : "ml-4")}>
+            {/* Add child input */}
+            {isAddingChild && (
+              <div className="flex gap-2 p-2">
+                <Input
+                  placeholder={`Tên ${labels.child}...`}
+                  value={newChildName}
+                  onChange={(e) => setNewChildName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddChild(dept.id, level);
+                    if (e.key === "Escape") setAddingChildTo(null);
+                  }}
+                  autoFocus
+                  className="h-8 text-sm"
+                />
+                <Button size="sm" className="h-8" onClick={() => handleAddChild(dept.id, level)}>
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
+
+            {/* Render children recursively */}
+            {children.map((child) => renderDepartment(child, level + 1))}
+
+            {children.length === 0 && !isAddingChild && (
+              <p className="text-xs text-muted-foreground py-2 px-2">
+                Chưa có {labels.child}
+              </p>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <Building2 className="w-4 h-4" />
-        Quản lý phòng ban
+        Quản lý phòng ban (3 cấp: Phòng → Bộ phận → Tổ)
       </div>
 
-      {/* Add new main department */}
+      {/* Add new root department */}
       <div className="flex gap-2">
         <Input
           placeholder="Tên phòng ban mới..."
           value={newDeptName}
           onChange={(e) => setNewDeptName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAddMainDept()}
+          onKeyDown={(e) => e.key === "Enter" && handleAddRootDept()}
           className="flex-1"
         />
-        <Button size="sm" onClick={handleAddMainDept}>
+        <Button size="sm" onClick={handleAddRootDept}>
           <Plus className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Department list */}
-      <div className="space-y-1 max-h-64 overflow-y-auto border border-border rounded-lg p-2">
-        {mainDepartments.length === 0 ? (
+      {/* Department tree */}
+      <div className="space-y-1 max-h-72 overflow-y-auto border border-border rounded-lg p-2">
+        {rootDepartments.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             Chưa có phòng ban nào
           </p>
         ) : (
-          mainDepartments.map((dept) => {
-            const subDepts = getSubDepartments(dept.id);
-            const isExpanded = expandedDepts.has(dept.id);
-            const isAddingSub = addingSubTo === dept.id;
-
-            return (
-              <Collapsible
-                key={dept.id}
-                open={isExpanded}
-                onOpenChange={() => toggleExpand(dept.id)}
-              >
-                <div className="flex items-center gap-1 p-2 rounded-md hover:bg-muted/50 group">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
-                      <ChevronRight
-                        className={cn(
-                          "w-4 h-4 transition-transform",
-                          isExpanded && "rotate-90"
-                        )}
-                      />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <Building2 className="w-4 h-4 text-primary shrink-0" />
-                  <span className="flex-1 text-sm font-medium truncate">
-                    {dept.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {subDepts.length} phòng nhỏ
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAddingSubTo(isAddingSub ? null : dept.id);
-                      setNewSubDeptName("");
-                    }}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
-                        disabled={deleting === dept.id}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Xóa phòng ban?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Bạn có chắc muốn xóa phòng ban "{dept.name}"? Hành động này không thể hoàn tác.
-                          Lưu ý: Không thể xóa nếu phòng ban đang có phòng nhỏ hoặc đang được sử dụng.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Hủy</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteDept(dept)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Xóa
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-
-                <CollapsibleContent>
-                  <div className="ml-6 pl-2 border-l border-border space-y-1">
-                    {/* Add sub-department input */}
-                    {isAddingSub && (
-                      <div className="flex gap-2 p-2">
-                        <Input
-                          placeholder="Tên phòng nhỏ..."
-                          value={newSubDeptName}
-                          onChange={(e) => setNewSubDeptName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleAddSubDept(dept.id);
-                            if (e.key === "Escape") setAddingSubTo(null);
-                          }}
-                          autoFocus
-                          className="h-8 text-sm"
-                        />
-                        <Button size="sm" className="h-8" onClick={() => handleAddSubDept(dept.id)}>
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Sub-departments list */}
-                    {subDepts.map((subDept) => (
-                      <div
-                        key={subDept.id}
-                        className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 group"
-                      >
-                        <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className="flex-1 text-sm truncate">{subDept.name}</span>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
-                              disabled={deleting === subDept.id}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Xóa phòng nhỏ?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Bạn có chắc muốn xóa phòng nhỏ "{subDept.name}"?
-                                Lưu ý: Không thể xóa nếu phòng nhỏ đang được sử dụng bởi tài liệu hoặc profile.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Hủy</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteDept(subDept)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Xóa
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    ))}
-
-                    {subDepts.length === 0 && !isAddingSub && (
-                      <p className="text-xs text-muted-foreground py-2 px-2">
-                        Chưa có phòng nhỏ
-                      </p>
-                    )}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })
+          rootDepartments.map((dept) => renderDepartment(dept, 0))
         )}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <Building2 className="w-3 h-3 text-primary" />
+          <span>Phòng ban</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <FolderOpen className="w-3 h-3 text-blue-500" />
+          <span>Bộ phận</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Users className="w-3 h-3 text-green-500" />
+          <span>Tổ</span>
+        </div>
       </div>
     </div>
   );

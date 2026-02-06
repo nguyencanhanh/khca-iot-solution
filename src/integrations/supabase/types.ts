@@ -439,6 +439,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_department_level: { Args: { dept_id: string }; Returns: number }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
