@@ -94,41 +94,47 @@ const Documents = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [subDepartmentFilter, setSubDepartmentFilter] = useState("all");
+  // Filter states for 3-level hierarchy
+  const [level1Filter, setLevel1Filter] = useState("all"); // Phòng ban
+  const [level2Filter, setLevel2Filter] = useState("all"); // Bộ phận
+  const [level3Filter, setLevel3Filter] = useState("all"); // Tổ
   const [projectFilter, setProjectFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
 
-  // Upload form state
+  // Upload form state - 3 levels
   const [uploadForm, setUploadForm] = useState({
     file: null as File | null,
     name: "",
     description: "",
-    department_id: "",
-    sub_department_id: "",
+    level1_id: "", // Phòng ban
+    level2_id: "", // Bộ phận
+    level3_id: "", // Tổ (stored in sub_department_id)
     project_id: "",
     is_public: false
   });
 
-  // Get main departments (parent_id is null)
-  const mainDepartments = departments.filter(d => d.parent_id === null);
+  // Get root departments (level 0 - Phòng ban)
+  const rootDepartments = departments.filter(d => d.parent_id === null);
   
-  // Get sub-departments for selected main department
-  const getSubDepartments = (parentId: string | null) => {
+  // Get children of a department
+  const getChildren = (parentId: string | null) => {
     if (!parentId) return [];
     return departments.filter(d => d.parent_id === parentId);
   };
 
-  // Sub-departments for upload form
-  const uploadSubDepartments = getSubDepartments(uploadForm.department_id || null);
+  // Upload form - children for each level
+  const uploadLevel2Options = getChildren(uploadForm.level1_id || null); // Bộ phận
+  const uploadLevel3Options = getChildren(uploadForm.level2_id || null); // Tổ
   
-  // Sub-departments for filter
-  const filterSubDepartments = departmentFilter !== "all" 
-    ? getSubDepartments(departmentFilter) 
-    : [];
+  // Filter - children for each level
+  const filterLevel2Options = level1Filter !== "all" ? getChildren(level1Filter) : [];
+  const filterLevel3Options = level2Filter !== "all" ? getChildren(level2Filter) : [];
+
+  // For backward compatibility - mainDepartments alias
+  const mainDepartments = rootDepartments;
 
   useEffect(() => {
     fetchDocuments();
@@ -136,15 +142,26 @@ const Documents = () => {
     fetchProjects();
   }, []);
 
-  // Reset sub-department when main department changes in upload form
+  // Reset level2 and level3 when level1 changes in upload form
   useEffect(() => {
-    setUploadForm(prev => ({ ...prev, sub_department_id: "" }));
-  }, [uploadForm.department_id]);
+    setUploadForm(prev => ({ ...prev, level2_id: "", level3_id: "" }));
+  }, [uploadForm.level1_id]);
 
-  // Reset sub-department filter when main department filter changes
+  // Reset level3 when level2 changes in upload form
   useEffect(() => {
-    setSubDepartmentFilter("all");
-  }, [departmentFilter]);
+    setUploadForm(prev => ({ ...prev, level3_id: "" }));
+  }, [uploadForm.level2_id]);
+
+  // Reset level2 and level3 filters when level1 filter changes
+  useEffect(() => {
+    setLevel2Filter("all");
+    setLevel3Filter("all");
+  }, [level1Filter]);
+
+  // Reset level3 filter when level2 filter changes
+  useEffect(() => {
+    setLevel3Filter("all");
+  }, [level2Filter]);
 
   const fetchDocuments = async () => {
     try {
@@ -222,6 +239,10 @@ const Documents = () => {
       if (uploadError) throw uploadError;
 
       // Create document record
+      // Store level1 as department_id and the deepest selected level as sub_department_id
+      const departmentId = uploadForm.level1_id || null;
+      const subDepartmentId = uploadForm.level3_id || uploadForm.level2_id || null;
+
       const { error: dbError } = await supabase
         .from('documents')
         .insert({
@@ -230,8 +251,8 @@ const Documents = () => {
           file_path: filePath,
           file_size: uploadForm.file.size,
           file_type: uploadForm.file.type,
-          department_id: uploadForm.department_id || null,
-          sub_department_id: uploadForm.sub_department_id || null,
+          department_id: departmentId,
+          sub_department_id: subDepartmentId,
           project_id: uploadForm.project_id || null,
           uploaded_by: user.id,
           is_public: uploadForm.is_public
@@ -245,8 +266,9 @@ const Documents = () => {
         file: null,
         name: "",
         description: "",
-        department_id: "",
-        sub_department_id: "",
+        level1_id: "",
+        level2_id: "",
+        level3_id: "",
         project_id: "",
         is_public: false
       });
@@ -309,10 +331,15 @@ const Documents = () => {
     const matchesSearch = 
       doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (doc.description?.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesDepartment = departmentFilter === "all" || doc.department_id === departmentFilter;
-    const matchesSubDepartment = subDepartmentFilter === "all" || doc.sub_department_id === subDepartmentFilter;
+    // Filter by level1 (department_id)
+    const matchesLevel1 = level1Filter === "all" || doc.department_id === level1Filter;
+    // Filter by level2 or level3 (sub_department_id can be either)
+    const matchesLevel2or3 = (level2Filter === "all" && level3Filter === "all") || 
+      doc.sub_department_id === level2Filter || 
+      doc.sub_department_id === level3Filter ||
+      (level2Filter !== "all" && level3Filter === "all" && getChildren(level2Filter).some(child => child.id === doc.sub_department_id));
     const matchesProject = projectFilter === "all" || doc.project_id === projectFilter;
-    return matchesSearch && matchesDepartment && matchesSubDepartment && matchesProject;
+    return matchesSearch && matchesLevel1 && matchesLevel2or3 && matchesProject;
   });
 
   const getDepartmentName = (id: string | null) => {
@@ -421,19 +448,20 @@ const Documents = () => {
                   />
                 </div>
 
-                {/* Department & Sub-department */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* 3-Level Department Selection */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Level 1: Phòng ban */}
                   <div className="space-y-2">
                     <Label>Phòng ban</Label>
                     <Select
-                      value={uploadForm.department_id}
-                      onValueChange={(value) => setUploadForm({ ...uploadForm, department_id: value })}
+                      value={uploadForm.level1_id}
+                      onValueChange={(value) => setUploadForm({ ...uploadForm, level1_id: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Chọn phòng ban" />
+                        <SelectValue placeholder="Chọn" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mainDepartments.map((dept) => (
+                        {rootDepartments.map((dept) => (
                           <SelectItem key={dept.id} value={dept.id}>
                             {dept.name}
                           </SelectItem>
@@ -441,26 +469,55 @@ const Documents = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  {/* Level 2: Bộ phận */}
                   <div className="space-y-2">
-                    <Label>Phòng nhỏ</Label>
+                    <Label>Bộ phận</Label>
                     <Select
-                      value={uploadForm.sub_department_id}
-                      onValueChange={(value) => setUploadForm({ ...uploadForm, sub_department_id: value })}
-                      disabled={!uploadForm.department_id || uploadSubDepartments.length === 0}
+                      value={uploadForm.level2_id}
+                      onValueChange={(value) => setUploadForm({ ...uploadForm, level2_id: value })}
+                      disabled={!uploadForm.level1_id || uploadLevel2Options.length === 0}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={
-                          !uploadForm.department_id 
-                            ? "Chọn phòng ban trước" 
-                            : uploadSubDepartments.length === 0 
-                              ? "Không có phòng nhỏ" 
-                              : "Chọn phòng nhỏ"
+                          !uploadForm.level1_id 
+                            ? "Chọn phòng ban" 
+                            : uploadLevel2Options.length === 0 
+                              ? "Không có" 
+                              : "Chọn"
                         } />
                       </SelectTrigger>
                       <SelectContent>
-                        {uploadSubDepartments.map((subDept) => (
-                          <SelectItem key={subDept.id} value={subDept.id}>
-                            {subDept.name}
+                        {uploadLevel2Options.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Level 3: Tổ */}
+                  <div className="space-y-2">
+                    <Label>Tổ</Label>
+                    <Select
+                      value={uploadForm.level3_id}
+                      onValueChange={(value) => setUploadForm({ ...uploadForm, level3_id: value })}
+                      disabled={!uploadForm.level2_id || uploadLevel3Options.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          !uploadForm.level2_id 
+                            ? "Chọn bộ phận" 
+                            : uploadLevel3Options.length === 0 
+                              ? "Không có" 
+                              : "Chọn"
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uploadLevel3Options.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -583,29 +640,49 @@ const Documents = () => {
             className="pl-10"
           />
         </div>
-        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-          <SelectTrigger className="w-full sm:w-40">
+        {/* Level 1 filter: Phòng ban */}
+        <Select value={level1Filter} onValueChange={setLevel1Filter}>
+          <SelectTrigger className="w-full sm:w-36">
             <SelectValue placeholder="Phòng ban" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tất cả phòng ban</SelectItem>
-            {mainDepartments.map((dept) => (
+            <SelectItem value="all">Tất cả PB</SelectItem>
+            {rootDepartments.map((dept) => (
               <SelectItem key={dept.id} value={dept.id}>
                 {dept.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {departmentFilter !== "all" && filterSubDepartments.length > 0 && (
-          <Select value={subDepartmentFilter} onValueChange={setSubDepartmentFilter}>
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue placeholder="Phòng nhỏ" />
+        
+        {/* Level 2 filter: Bộ phận */}
+        {level1Filter !== "all" && filterLevel2Options.length > 0 && (
+          <Select value={level2Filter} onValueChange={setLevel2Filter}>
+            <SelectTrigger className="w-full sm:w-36">
+              <SelectValue placeholder="Bộ phận" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tất cả phòng nhỏ</SelectItem>
-              {filterSubDepartments.map((subDept) => (
-                <SelectItem key={subDept.id} value={subDept.id}>
-                  {subDept.name}
+              <SelectItem value="all">Tất cả BP</SelectItem>
+              {filterLevel2Options.map((dept) => (
+                <SelectItem key={dept.id} value={dept.id}>
+                  {dept.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        
+        {/* Level 3 filter: Tổ */}
+        {level2Filter !== "all" && filterLevel3Options.length > 0 && (
+          <Select value={level3Filter} onValueChange={setLevel3Filter}>
+            <SelectTrigger className="w-full sm:w-36">
+              <SelectValue placeholder="Tổ" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả Tổ</SelectItem>
+              {filterLevel3Options.map((dept) => (
+                <SelectItem key={dept.id} value={dept.id}>
+                  {dept.name}
                 </SelectItem>
               ))}
             </SelectContent>
