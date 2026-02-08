@@ -13,8 +13,16 @@ const AdminLayout = () => {
       {/* Mobile Overlay */}
       {mobileSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden touch-manipulation"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMobileSidebarOpen(false);
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setMobileSidebarOpen(false);
+          }}
         />
       )}
 
