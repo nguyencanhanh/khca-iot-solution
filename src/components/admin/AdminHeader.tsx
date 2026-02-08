@@ -11,18 +11,14 @@ const AdminHeader = ({ onMenuToggle }: AdminHeaderProps) => {
     <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
       {/* Left Side */}
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden min-w-[44px] min-h-[44px] touch-manipulation"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onMenuToggle?.();
-          }}
+        <button
+          type="button"
+          className="lg:hidden min-w-[44px] min-h-[44px] p-2 rounded-md hover:bg-accent touch-manipulation active:bg-accent/80"
+          onClick={() => onMenuToggle?.()}
+          aria-label="Mở menu"
         >
-          <Menu className="w-5 h-5" />
-        </Button>
+          <Menu className="w-6 h-6" />
+        </button>
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 

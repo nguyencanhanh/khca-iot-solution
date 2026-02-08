@@ -57,18 +57,14 @@ const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
             </span>
           )}
         </Link>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onToggle?.();
-          }}
-          className="text-sidebar-foreground hover:bg-sidebar-accent min-w-[44px] min-h-[44px] touch-manipulation"
+        <button
+          type="button"
+          className="min-w-[44px] min-h-[44px] p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent touch-manipulation active:bg-sidebar-accent/80"
+          onClick={() => onToggle?.()}
+          aria-label="Thu gọn sidebar"
         >
           <ChevronLeft className={cn("w-5 h-5 transition-transform", collapsed && "rotate-180")} />
-        </Button>
+        </button>
       </div>
 
       {/* Navigation */}
