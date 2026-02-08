@@ -62,10 +62,10 @@ const AdminSidebar = ({ collapsed = false, fixed = true, onToggle }: AdminSideba
         </Link>
         <button
           type="button"
-          className="min-w-[44px] min-h-[44px] p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent touch-manipulation active:bg-sidebar-accent/80"
-          onPointerUp={(e) => {
+          className="min-w-[48px] min-h-[48px] p-3 rounded-md text-sidebar-foreground hover:bg-sidebar-accent touch-manipulation active:bg-sidebar-accent/80 select-none"
+          onClick={() => onToggle?.()}
+          onTouchEnd={(e) => {
             e.preventDefault();
-            e.stopPropagation();
             onToggle?.();
           }}
           aria-label="Thu gọn sidebar"
