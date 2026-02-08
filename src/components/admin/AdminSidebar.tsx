@@ -27,10 +27,11 @@ const menuItems = [
 
 interface AdminSidebarProps {
   collapsed?: boolean;
+  fixed?: boolean;
   onToggle?: () => void;
 }
 
-const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
+const AdminSidebar = ({ collapsed = false, fixed = true, onToggle }: AdminSidebarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
@@ -42,7 +43,9 @@ const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
 
   return (
     <aside className={cn(
-      "fixed left-0 top-0 h-screen bg-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 z-40",
+      "bg-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 z-40",
+      fixed && "fixed left-0 top-0 h-screen",
+      !fixed && "h-full",
       collapsed ? "w-20" : "w-64"
     )}>
       {/* Header */}
@@ -60,7 +63,11 @@ const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
         <button
           type="button"
           className="min-w-[44px] min-h-[44px] p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent touch-manipulation active:bg-sidebar-accent/80"
-          onClick={() => onToggle?.()}
+          onPointerUp={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle?.();
+          }}
           aria-label="Thu gọn sidebar"
         >
           <ChevronLeft className={cn("w-5 h-5 transition-transform", collapsed && "rotate-180")} />

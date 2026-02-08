@@ -40,7 +40,8 @@ const AdminLayout = () => {
         mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <AdminSidebar 
-          collapsed={false} 
+          collapsed={false}
+          fixed={false}
           onToggle={() => setMobileSidebarOpen(false)} 
         />
       </div>
