@@ -13,10 +13,10 @@ const AdminHeader = ({ onMenuToggle }: AdminHeaderProps) => {
       <div className="flex items-center gap-4">
         <button
           type="button"
-          className="lg:hidden min-w-[44px] min-h-[44px] p-2 rounded-md hover:bg-accent touch-manipulation active:bg-accent/80"
-          onPointerUp={(e) => {
+          className="lg:hidden min-w-[48px] min-h-[48px] p-3 rounded-md hover:bg-accent touch-manipulation active:bg-accent/80 select-none"
+          onClick={() => onMenuToggle?.()}
+          onTouchEnd={(e) => {
             e.preventDefault();
-            e.stopPropagation();
             onMenuToggle?.();
           }}
           aria-label="Mở menu"
