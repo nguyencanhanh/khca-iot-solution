@@ -14,8 +14,12 @@ const AdminHeader = ({ onMenuToggle }: AdminHeaderProps) => {
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
-          onClick={onMenuToggle}
+          className="lg:hidden min-w-[44px] min-h-[44px] touch-manipulation"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onMenuToggle?.();
+          }}
         >
           <Menu className="w-5 h-5" />
         </Button>

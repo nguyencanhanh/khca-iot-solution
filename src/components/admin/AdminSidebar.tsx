@@ -60,8 +60,12 @@ const AdminSidebar = ({ collapsed = false, onToggle }: AdminSidebarProps) => {
         <Button
           variant="ghost"
           size="icon"
-          onClick={onToggle}
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle?.();
+          }}
+          className="text-sidebar-foreground hover:bg-sidebar-accent min-w-[44px] min-h-[44px] touch-manipulation"
         >
           <ChevronLeft className={cn("w-5 h-5 transition-transform", collapsed && "rotate-180")} />
         </Button>
