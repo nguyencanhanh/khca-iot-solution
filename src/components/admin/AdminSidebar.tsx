@@ -64,10 +64,6 @@ const AdminSidebar = ({ collapsed = false, fixed = true, onToggle }: AdminSideba
           type="button"
           className="min-w-[48px] min-h-[48px] p-3 rounded-md text-sidebar-foreground hover:bg-sidebar-accent touch-manipulation active:bg-sidebar-accent/80 select-none"
           onClick={() => onToggle?.()}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            onToggle?.();
-          }}
           aria-label="Thu gọn sidebar"
         >
           <ChevronLeft className={cn("w-5 h-5 transition-transform", collapsed && "rotate-180")} />
