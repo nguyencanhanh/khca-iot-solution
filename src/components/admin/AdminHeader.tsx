@@ -15,10 +15,6 @@ const AdminHeader = ({ onMenuToggle }: AdminHeaderProps) => {
           type="button"
           className="lg:hidden min-w-[48px] min-h-[48px] p-3 rounded-md hover:bg-accent touch-manipulation active:bg-accent/80 select-none"
           onClick={() => onMenuToggle?.()}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            onMenuToggle?.();
-          }}
           aria-label="Mở menu"
         >
           <Menu className="w-6 h-6" />
